@@ -1,0 +1,296 @@
+<html>
+<head></head>
+<body>
+<script src="js/ammo.js"></script>
+
+<script src="js/three.js"></script>
+<script src="js/WebGL.js"></script>	
+Update your map first &nbsp;&nbsp;<input type="file" name="upload" id="upload" onchange="updateMap(this)" accept="text/plain"/> &nbsp;&nbsp;
+<p></p>
+<script>
+var mapData = null
+function updateMap(fileInput) {
+            if (fileInput.files && fileInput.files.length > 0 && fileInput.files[0].size > 0) {
+                var file = fileInput.files[0];
+                if (window.FileReader) {
+                    var reader = new FileReader();
+                    reader.onloadend = function (evt) {
+                        if (evt.target.readyState == FileReader.DONE) {
+                            mapData = JSON.parse( evt.target.result );
+							//console.log(mapData);
+							initiateGame();
+                        }
+                    };
+                    reader.readAsText(file, 'utf-8');
+                }
+            }
+
+}
+//initiateGame();
+function initiateGame(){
+	Ammo().then(function (Ammo){
+
+var renderer,scene,camera;
+var collisionConfiguration,dispatcher,broadphase,solver,softBodySolver,physicsWorld;
+var gravityConfiguration = -10;
+var rigidBodies = [];
+var transformAssistant = new Ammo.btTransform();
+var ball;
+var pos = new THREE.Vector3();
+var qua = new THREE.Quaternion();
+var clock = new THREE.Clock();
+var axisX = 0;
+var axisZ = 0;
+var fieldSize = 5;
+var wide = 3;
+var height = 2;
+var startPoint;
+var endPoint;
+//initiate finish
+var rayCaster = new THREE.Raycaster();
+//rayCaster.ray.direction.set(0,1,0);
+var hit;
+// map
+var map = mapData.map;
+/*
+var map = [
+[0,0,0],[9,0,0],[0,0,0],
+[1,0,0],[1,0,0],[0,0,0],
+[1,0,0],[0,0,0],[0,0,0],
+[2,1,-12.5],[0,0,0],[0,0,0],
+[1,2,0],[1,2,0],[1,2,0],
+[0,0,0],[0,0,0],[1,2,0],
+[0,0,0],[0,0,0],[2,1,12.5],
+[0,0,0],[1,0,0],[1,0,0],
+[0,0,0],[8,0,0],[0,0,0]
+];// 8 start point; 9 end point; 1 road;*/
+
+// basic classes
+renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.body.appendChild(renderer.domElement);
+scene = new THREE.Scene();
+camera = new THREE.PerspectiveCamera(45,window.innerWidth/window.innerHeight,1,1000);
+scene.add(camera);
+initiatePhysics();
+createTerritory();
+createBall();
+initiateEnd();
+keyboardInput();
+function render(){
+	renderer.render(scene,camera);
+	var deltaTime = clock.getDelta();
+	updatePhysics(deltaTime);
+}
+function update(){
+	camera.position.copy(ball.position);
+	camera.position.y += 10;
+	camera.position.z += 15;
+	camera.lookAt(ball.position);
+	if(rayCaster.ray.distanceToPoint(ball.position)<1){
+		console.log('end');
+	}
+}
+function gameLoop(){
+	requestAnimationFrame(gameLoop);
+	render();
+	update();
+}
+gameLoop();
+//initial territory
+function createTerritory(){
+	var line = 0;
+	var raw = 0;
+	for(var i = 0; i<map.length;i++){
+		switch(map[i]['type']){
+			case 1:
+			createPlane(new THREE.Vector3(map[i]['px'],map[i]['py'],map[i]['pz']),new THREE.Vector3(map[i]['rx'],map[i]['ry'],map[i]['rz']));
+			break;
+			case 8:
+			startPoint = createPlane(new THREE.Vector3(map[i]['px'],map[i]['py'],map[i]['pz']),new THREE.Vector3(map[i]['rx'],map[i]['ry'],map[i]['rz']));
+			startPoint.material = new THREE.MeshBasicMaterial({color:0xff0000});
+			break;
+			case 9:
+			endPoint = createPlane(new THREE.Vector3(map[i]['px'],map[i]['py'],map[i]['pz']),new THREE.Vector3(map[i]['rx'],map[i]['ry'],map[i]['rz']));
+			endPoint.material = new THREE.MeshBasicMaterial({color:0x00ff00});
+			break;
+		}
+		raw++;
+		
+		if((i+1)%wide == 0&& i != 0){
+			line += fieldSize;
+			raw = 0;
+		}
+		
+	}
+}
+//game finish
+function initiateEnd(){
+	rayCaster.ray.origin.copy(endPoint.position);
+	rayCaster.ray.distanceToPoint(ball.position);
+}
+//adding objects
+function createBall(){
+	var ballRadius = 0.5;var ballSegment = 30;var ballMess = 20;
+	var ballGeometry = new THREE.SphereBufferGeometry(ballRadius,ballSegment,ballSegment);
+	var ballMaterial = new THREE.MeshBasicMaterial({color:0xffffff});
+	ball = new THREE.Mesh(ballGeometry,ballMaterial);
+	var ballShape = new Ammo.btSphereShape(ballRadius);
+	ballShape.setMargin(0.05);
+	if(startPoint==null){
+		pos.set(0,5,0);
+	}else{
+		pos.set(startPoint.position.x,startPoint.position.y+5,startPoint.position.z);
+	}
+	qua.set(0,0,0,1);
+	ball.name = "player";
+	createRigidBody(ball,ballShape,ballMess,pos,qua);
+}
+
+function createPlane(position,rotation){
+	var size = 5;
+	var planeW = size;var planeH = 0.5;var planeL = size; planeMass = 0;
+	var planeGeometry = new THREE.BoxBufferGeometry(planeW,planeH,planeL); 
+	var planeMaterial = new THREE.MeshBasicMaterial({color:0x006969});
+	var plane = new THREE.Mesh(planeGeometry,planeMaterial);
+	var planeShape = new Ammo.btBoxShape(new Ammo.btVector3(planeW*0.5,planeH*0.5,planeL*0.5));
+	planeShape.setMargin(0.05);
+	//pos.set(0,0,0);
+	qua.set(rotation.x,rotation.y,rotation.z,1);
+	/*if(rotationX){
+		qua.set(rotationX,0,0,1);
+	}else{
+		
+	}*/
+	createRigidBody(plane,planeShape,planeMass,position,qua);
+	//plane.body.setMassProps(0.0, new Ammo.btVector3(0,0,0));
+	return plane;
+}
+function createWalls(){
+	var wallW = 1;var wallH = 2;var wallL = 3; wallMass = 20;
+	var wallGeometry = new THREE.BoxBufferGeometry(wallW,wallH,wallL);
+	var wallMaterial = new THREE.MeshBasicMaterial({color:0x00abab});
+	var wall = new THREE.Mesh(wallGeometry,wallMaterial);
+	var wallShape = new Ammo.btBoxShape(new Ammo.btVector3(wallW*0.5,wallH*0.5,wallL*0.5));
+	wallShape.setMargin(0.05);
+	pos.set(0,1.5,0);
+	qua.set(0,0,0,1);
+	createRigidBody(wall,wallShape,wallMass,pos,qua);
+	wall.body.setFriction(0);
+	wall.body.setMassProps(0.0, new Ammo.btVector3(0,0,0));
+}
+
+
+//physics functions
+function updatePhysics(deltaTime){
+	physicsWorld.stepSimulation(deltaTime,10);
+	for(var i = 0,j = rigidBodies.length;i<j;i++){
+		var object = rigidBodies[i];
+		var objectBody = object.body;
+		var motionState = objectBody.getMotionState();
+		if(motionState){
+			motionState.getWorldTransform(transformAssistant);		
+			var position = transformAssistant.getOrigin();
+			var quaternion = transformAssistant.getRotation();
+			if(object.name == "player"){
+				objectBody.setAngularVelocity(new Ammo.btVector3(objectBody.getAngularVelocity().x()+axisX,0,objectBody.getAngularVelocity().z()+axisZ));
+				objectBody.setLinearVelocity(new Ammo.btVector3(objectBody.getLinearVelocity().x()+axisX,objectBody.getLinearVelocity().y(),objectBody.getLinearVelocity().z()+axisZ));
+			}
+			object.position.set( position.x(), position.y(), position.z() );
+			object.quaternion.set( quaternion.x(), quaternion.y(), quaternion.z(), quaternion.w() );	
+		}
+	}
+
+}
+
+function initiatePhysics(){
+	collisionConfiguration = new Ammo.btSoftBodyRigidBodyCollisionConfiguration();
+	dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
+	broadphase = new Ammo.btDbvtBroadphase();
+	solver =new Ammo.btSequentialImpulseConstraintSolver();
+	softBodySolver = new Ammo.btDefaultSoftBodySolver();
+	physicsWorld = new Ammo.btSoftRigidDynamicsWorld(dispatcher,broadphase,solver,collisionConfiguration,softBodySolver);
+	physicsWorld.setGravity(new Ammo.btVector3(0,gravityConfiguration,0));
+	physicsWorld.getWorldInfo().set_m_gravity(new Ammo.btVector3(0,gravityConfiguration,0));
+}
+
+function createRigidBody(object,shape,mass,position,quaternion){
+	object.position.copy(position);
+	object.quaternion.copy(quaternion);
+	var transform = new Ammo.btTransform();
+	transform.setIdentity();
+	transform.setOrigin(new Ammo.btVector3(position.x,position.y,position.z));
+	transform.setRotation(new Ammo.btQuaternion(quaternion.x,quaternion.y,quaternion.z,quaternion.w));
+	var motionState = new Ammo.btDefaultMotionState(transform);
+	object.position.copy(position);
+	object.quaternion.copy(quaternion);
+	var transform = new Ammo.btTransform();
+	transform.setIdentity();
+	transform.setOrigin(new Ammo.btVector3(position.x,position.y,position.z));
+	transform.setRotation(new Ammo.btQuaternion(quaternion.x,quaternion.y,quaternion.z,quaternion.w));
+	var motionState = new Ammo.btDefaultMotionState(transform);
+	var inertia = new Ammo.btVector3(0,0,0);
+	shape.calculateLocalInertia(mass,inertia);
+	var rigidBodyInfo = new Ammo.btRigidBodyConstructionInfo(mass,motionState,shape,inertia);
+	var body = new Ammo.btRigidBody(rigidBodyInfo);
+	object.body = body;
+	scene.add(object);
+	if(mass>0){
+		rigidBodies.push(object);
+		body.setActivationState(4);
+	}
+	physicsWorld.addRigidBody( body );
+}
+// control
+function keyboardInput(){
+	window.addEventListener('keydown',function(event){		
+		switch(event.keyCode){
+			// W
+			case 87:
+			axisZ = -0.05;
+			break;
+			// S
+			case 83:
+			axisZ = 0.05;
+			break;
+			// A
+			case 65:
+			axisX = -0.05;
+			break;
+			// D
+			case 68:
+			axisX = 0.05;
+			break;
+
+		}
+			
+	}, false);
+	window.addEventListener('keyup' ,function(event){
+		switch(event.keyCode){
+			// W
+			case 87:
+			axisZ = 0;
+			break;
+			// S
+			case 83:
+			axisZ = 0;
+			break;
+			// A
+			case 65:
+			axisX = 0;
+			break;
+			// D
+			case 68:
+			axisX = 0;
+			break;
+		}
+	},false);
+	
+
+
+}
+
+});}
+</script>
+</body>
+</html>

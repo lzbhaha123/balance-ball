@@ -1,0 +1,299 @@
+<html>
+<head></head>
+<body>
+<script src="js/ammo.js"></script>
+
+<script src="js/three.js"></script>
+<script src="js/WebGL.js"></script>	
+<script src="js/OrbitControls.js"></script>	
+<div onmouseover="onMouseOver()" onmouseout="onMouseOut()" style="width:100%; height:20px; background-color:white; margin-bottom:10px">
+<input name="controlFunction" type="radio" value="1" onclick="selectFunction(this)" checked />create plane &nbsp;&nbsp;
+<input name="controlFunction" type="radio" value="2" onclick="selectFunction(this)" />select plane &nbsp;&nbsp;|
+&nbsp;&nbsp; Position:
+X:<input id="positionX" type="text" value="0" style="width:40px" />
+Y:<input id="positionY" type="text" value="0" style="width:40px" />
+Z:<input id="positionZ" type="text" value="0" style="width:40px" />
+&nbsp;&nbsp; Rotation:
+X:<input id="rotationX" type="text" value="0" style="width:40px" />
+Y:<input id="rotationY" type="text" value="0" style="width:40px" />
+Z:<input id="rotationZ" type="text" value="0" style="width:40px" />
+<input type="button" value="Modify" onclick="submitMotification()" />
+&nbsp;&nbsp;|&nbsp;&nbsp;
+<input type="button" value="Start point" onclick="setStartPoint()" />
+<input type="button" value="End point" onclick="setEndPoint()" />
+&nbsp;&nbsp;
+<input type="button" value="Delete" onclick="deletePlane()" />
+&nbsp;&nbsp;
+<input type="button" value="Submit" onclick="submitMap()" />
+</div>
+<script>
+var lock = false;
+var controlType = 1;
+//menu
+function selectFunction(element){
+	controlType = element.value;
+}
+function onMouseOver(){
+	lock =true;
+}
+function onMouseOut(){
+	lock =false;
+}
+function submitMotification(){
+	modifyObject();
+}
+//Ammo().then(function (Ammo){
+
+var fieldSize = 5;
+var horizontal = 6;
+var vertical = 3;
+var mouse = new THREE.Vector2();
+var rayCaster = new THREE.Raycaster();
+var planes = [];
+var selectedObject;
+//basic
+var renderer,scene,camera;
+var renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight-30);
+document.body.appendChild(renderer.domElement);
+scene = new THREE.Scene();
+camera = new THREE.PerspectiveCamera(45,window.innerWidth/(window.innerHeight),1,1000);
+scene.add(camera);
+var orbitContral = new THREE.OrbitControls(camera);
+createFields();
+
+var viewerGeometry = new THREE.BoxBufferGeometry(1,1,1);
+var viewerMaterial = new THREE.MeshBasicMaterial({visible:false});
+var viewer = new THREE.Mesh(viewerGeometry,viewerMaterial);
+viewer.position.set(0,0,0);
+scene.add(viewer);
+camera.position.set( 0, 50, 50 );
+camera.lookAt( 0, 0, 0 );
+
+var planeMaterial = new THREE.MeshBasicMaterial({color:0x006969});
+var startPointMaterial = new THREE.MeshBasicMaterial({color:0xff0000});
+var endPointMaterial = new THREE.MeshBasicMaterial({color:0x00ff00});
+var selectedMaterial = new THREE.MeshBasicMaterial({color:0xffffff});
+
+window.addEventListener( 'click', mouseClick, false );
+
+function render(){
+	renderer.render( scene, camera );
+
+}
+function update(){
+orbitContral.enabled = lock ? false : true;
+	for(var i = 0;i<planes.length;i++){
+		if(planes[i].selected){
+			planes[i].material = selectedMaterial;
+		}else{
+			switch(planes[i].type){
+				case 1:
+					planes[i].material = planeMaterial;
+				break;
+				case 8:
+					planes[i].material = startPointMaterial;
+				break;
+				case 9:
+					planes[i].material = endPointMaterial;
+				break;
+			}
+		}
+		
+	}
+}
+function gameLoop(){
+	requestAnimationFrame(gameLoop);
+	render();
+	update();
+}
+gameLoop();
+// control
+function submitMap(){
+	var number = Math.floor(Math.random()*1000); 
+    var w = window.open('', 'Export', 'height=0,width=0,toolbar=no,menubar=no,scrollbars=no,resizable=on,location=no,status=no');
+	var dt = new Date();
+    w.document.charset = "UTF-8";
+    w.document.write('{"map":[');
+	for(var i = 0; i<planes.length;i++){
+		w.document.write('{"px":'+planes[i].position.x+',"py":'+planes[i].position.y+',"pz":'+planes[i].position.z+',"rx":'+planes[i].rotation.x+',"ry":'+planes[i].rotation.y+',"rz":'+planes[i].rotation.z+',"type":'+planes[i].type+'}');
+		if(i!=planes.length-1){
+			w.document.write(',');
+		}
+	}
+	w.document.write(']}');
+    w.document.execCommand('SaveAs', false,  'map'+number+'.txt');
+   // w.close();
+}
+function deletePlane(){
+	if(selectedObject){
+		for(var i = 0; i<planes.length;i++){
+			if(selectedObject.uuid==planes[i].uuid){
+				console.log(planes[i].position);
+				for(var j = i;j <planes.length;j++){
+					planes[j]=planes[j+1];
+				}
+				planes.length = planes.length-1;
+			}
+		}
+		scene.remove(selectedObject);
+	}
+}
+function setStartPoint(){
+	for(var i = 0; i<planes.length;i++){
+		if(planes[i].type==8)planes[i].type=1;
+	}
+	selectedObject.type = 8;
+}
+function setEndPoint(){
+	for(var i = 0; i<planes.length;i++){
+		if(planes[i].type==9)planes[i].type=1;
+	}
+	selectedObject.type = 9;
+}
+function modifyObject(){
+	selectedObject.position.x = document.getElementById('positionX').value;
+	selectedObject.position.y = document.getElementById('positionY').value;
+	selectedObject.position.z = document.getElementById('positionZ').value;
+	
+	selectedObject.rotation.x = document.getElementById('rotationX').value;
+	selectedObject.rotation.y = document.getElementById('rotationY').value;
+	selectedObject.rotation.z = document.getElementById('rotationZ').value;
+}
+function mouseClick(e){
+	if(lock){
+	return false;
+	}
+
+	mouse.x = (e.clientX / renderer.domElement.clientWidth)*2-1;
+	mouse.y = -(e.clientY / renderer.domElement.clientHeight)*2+1;
+	rayCaster.setFromCamera(mouse,camera);
+	if(controlType == 1){
+		var intersections = rayCaster.intersectObjects(scene.children);
+		if(intersections[0].point){
+			var position = intersections[0].point;
+			var adjectX = Math.round(position.x);
+			adjectX += (5-(adjectX%5)>2) ? -(adjectX%5) : 5-(adjectX%5);
+			var adjectY = Math.round(position.y);
+			adjectY += (5-(adjectY%5)>2) ? -(adjectY%5) : 5-(adjectY%5);
+			var adjectZ = Math.round(position.z);
+			adjectZ += (5-(adjectZ%5)>2) ? -(adjectZ%5) : 5-(adjectZ%5);
+			position = new THREE.Vector3(adjectX,adjectY,adjectZ);
+			createPlane(position);
+		}
+	}else if(controlType == 2){
+		var intersections = rayCaster.intersectObjects(planes);
+		if(intersections[0].point){
+			if(selectedObject)selectedObject.selected = false;
+			selectedObject = intersections[0].object;
+			selectedObject.selected = true;
+			//console.log(intersections[0]);
+			document.getElementById('positionX').value=intersections[0].object.position.x;
+			document.getElementById('positionY').value=intersections[0].object.position.y;
+			document.getElementById('positionZ').value=intersections[0].object.position.z;
+			document.getElementById('rotationX').value=intersections[0].object.rotation.x;
+			document.getElementById('rotationY').value=intersections[0].object.rotation.y;
+			document.getElementById('rotationZ').value=intersections[0].object.rotation.z;
+		}
+	}
+	
+}
+function createPlane(pos,rotationX){ 
+	var planeW = 5;var planeH = 0.5;var planeL = 5; planeMass = 0;
+	var planeGeometry = new THREE.BoxBufferGeometry(planeW,planeH,planeL); 
+
+	var plane = new THREE.Mesh(planeGeometry,planeMaterial);
+	plane.position.copy(pos);
+	plane.type = 1;
+	plane.selected = false;
+	scene.add(plane);
+	planes.push(plane);
+	
+}
+
+
+
+
+function createFields(){
+
+//Y
+	for(var i = 0;i<horizontal;i++){
+	var material = new THREE.LineBasicMaterial( { color: 0xffff00 } );
+	var geometry = new THREE.Geometry();		
+	geometry.vertices.push(new THREE.Vector3( i*fieldSize+(-fieldSize*(horizontal*0.5)), -fieldSize*(vertical*0.5), 0) );	
+	geometry.vertices.push(new THREE.Vector3( i*fieldSize+(-fieldSize*(horizontal*0.5)), fieldSize*(vertical*0.5), 0) );	
+	var line = new THREE.Line( geometry, material );
+	scene.add( line );
+	}
+	for(var i = 0;i<vertical;i++){
+	var material = new THREE.LineBasicMaterial( { color: 0xffff00 } );
+	var geometry = new THREE.Geometry();		
+	geometry.vertices.push(new THREE.Vector3( -fieldSize*(horizontal*0.5),i*fieldSize+(-fieldSize*(vertical*0.5)),  0) );	
+	geometry.vertices.push(new THREE.Vector3( fieldSize*(horizontal*0.5),i*fieldSize+(-fieldSize*(vertical*0.5)),  0) );	
+	var line = new THREE.Line( geometry, material );
+	scene.add( line );
+	}
+
+//X
+	for(var i = 0;i<horizontal;i++){
+	var material = new THREE.LineBasicMaterial( { color: 0x00ffff } );
+	var geometry = new THREE.Geometry();		
+	geometry.vertices.push(new THREE.Vector3( -fieldSize*(horizontal*0.5), 0, i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+	geometry.vertices.push(new THREE.Vector3(fieldSize*(horizontal*0.5), 0,  i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+	var line = new THREE.Line( geometry, material );
+	scene.add( line );
+	}
+	for(var i = 0;i<horizontal;i++){
+	var material = new THREE.LineBasicMaterial( { color: 0x00ffff } );
+	var geometry = new THREE.Geometry();		
+	geometry.vertices.push(new THREE.Vector3( i*fieldSize+(-fieldSize*(horizontal*0.5)),0,  -fieldSize*(horizontal*0.5)) );	
+	geometry.vertices.push(new THREE.Vector3( i*fieldSize+(-fieldSize*(horizontal*0.5)),0,  fieldSize*(horizontal*0.5)) );	
+	var line = new THREE.Line( geometry, material );
+	scene.add( line );
+	}
+
+//Z
+	for(var i = 0;i<horizontal;i++){
+	var material = new THREE.LineBasicMaterial( { color: 0xff00ff } );
+	var geometry = new THREE.Geometry();		
+	geometry.vertices.push(new THREE.Vector3(  fieldSize*(horizontal*0.5), -fieldSize*(vertical*0.5),i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+	geometry.vertices.push(new THREE.Vector3( fieldSize*(horizontal*0.5), fieldSize*(vertical*0.5), i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+	var line = new THREE.Line( geometry, material );
+	scene.add( line );
+	}
+	for(var i = 0;i<vertical;i++){
+	var material = new THREE.LineBasicMaterial( { color: 0xff00ff } );
+	var geometry = new THREE.Geometry();		
+	geometry.vertices.push(new THREE.Vector3( fieldSize*(horizontal*0.5), i*fieldSize+(-fieldSize*(vertical*0.5)), -fieldSize*(horizontal*0.5)) );	
+	geometry.vertices.push(new THREE.Vector3(fieldSize*(horizontal*0.5), i*fieldSize+(-fieldSize*(vertical*0.5)), fieldSize*(horizontal*0.5)) );	
+	var line = new THREE.Line( geometry, material );
+	scene.add( line );
+	}
+	
+	
+	for(var i = 0;i<horizontal;i++){
+		for(var j = 0;j<horizontal;j++){
+			var material = new THREE.LineBasicMaterial( { color: 0xffffff ,visible:false  } );
+			var geometry = new THREE.Geometry();		
+			geometry.vertices.push(new THREE.Vector3( j*fieldSize+(-fieldSize*(horizontal*0.5)), -fieldSize*(vertical*0.5), i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+			geometry.vertices.push(new THREE.Vector3( j*fieldSize+(-fieldSize*(horizontal*0.5)), fieldSize*(vertical*0.5), i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+			var line = new THREE.Line( geometry, material );
+			scene.add( line );
+		}
+		for(var j = 0;j<vertical;j++){
+			var material = new THREE.LineBasicMaterial( { color: 0xffffff,visible:false } );
+			var geometry = new THREE.Geometry();		
+			geometry.vertices.push(new THREE.Vector3( -fieldSize*(horizontal*0.5),j*fieldSize+(-fieldSize*(vertical*0.5)), i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+			geometry.vertices.push(new THREE.Vector3( fieldSize*(horizontal*0.5),j*fieldSize+(-fieldSize*(vertical*0.5)),  i*fieldSize+(-fieldSize*(horizontal*0.5))) );	
+			var line = new THREE.Line( geometry, material );
+			scene.add( line );
+		}
+	}
+}
+
+//});
+
+
+</script>
+</body>
+</html>
